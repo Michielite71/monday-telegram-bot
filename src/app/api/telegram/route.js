@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { sendMessage, sendTypingAction } from "@/lib/telegram";
+import { sendMessage, sendTypingAction, withTypingIndicator } from "@/lib/telegram";
 import { fetchAllMerchants, getMerchantSummary, formatMerchantDetail } from "@/lib/monday";
 import { askClaude } from "@/lib/claude";
 import { isAuthorized, authorize, deauthorize } from "@/lib/auth";
@@ -108,8 +108,7 @@ async function handleLogout(chatId) {
 }
 
 async function handleSummary(chatId) {
-  await sendTypingAction(chatId);
-  const items = await fetchAllMerchants();
+  const items = await withTypingIndicator(chatId, () => fetchAllMerchants());
   const summary = getMerchantSummary(items);
 
   let text = `📊 *Pipeline Summary*
@@ -136,8 +135,7 @@ async function handleSearch(chatId, args) {
     return;
   }
 
-  await sendTypingAction(chatId);
-  const items = await fetchAllMerchants();
+  const items = await withTypingIndicator(chatId, () => fetchAllMerchants());
   const query = args.toLowerCase();
   const matches = items.filter((i) => i.name.toLowerCase().includes(query));
 
@@ -156,8 +154,7 @@ async function handleSearch(chatId, args) {
 }
 
 async function handleStuck(chatId) {
-  await sendTypingAction(chatId);
-  const items = await fetchAllMerchants();
+  const items = await withTypingIndicator(chatId, () => fetchAllMerchants());
 
   const stuckItems = items.filter((item) => {
     return item.column_values.some((col) => {
@@ -195,25 +192,25 @@ async function handleStuck(chatId) {
 }
 
 async function handleNaturalLanguage(chatId, text) {
-  await sendTypingAction(chatId);
+  const response = await withTypingIndicator(chatId, async () => {
+    let merchantData = null;
 
-  let merchantData = null;
+    // Only fetch CRM data if the question seems related
+    if (needsCrmData(text)) {
+      const items = await fetchAllMerchants();
+      merchantData = items.map((item) => ({
+        name: item.name,
+        group: item.group.title,
+        columns: Object.fromEntries(
+          item.column_values
+            .filter((c) => c.text)
+            .map((c) => [c.id, c.text])
+        ),
+      }));
+    }
 
-  // Only fetch CRM data if the question seems related
-  if (needsCrmData(text)) {
-    const items = await fetchAllMerchants();
-    merchantData = items.map((item) => ({
-      name: item.name,
-      group: item.group.title,
-      columns: Object.fromEntries(
-        item.column_values
-          .filter((c) => c.text)
-          .map((c) => [c.id, c.text])
-      ),
-    }));
-  }
-
-  const response = await askClaude(text, merchantData);
+    return await askClaude(text, merchantData);
+  });
 
   if (response.length > 4000) {
     const chunks = response.match(/.{1,4000}/gs);

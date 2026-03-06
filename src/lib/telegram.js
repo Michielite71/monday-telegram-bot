@@ -26,6 +26,17 @@ export async function sendTypingAction(chatId) {
   });
 }
 
+// Keeps sending "typing..." every 4 seconds while a promise is running
+export async function withTypingIndicator(chatId, asyncFn) {
+  const interval = setInterval(() => sendTypingAction(chatId), 4000);
+  await sendTypingAction(chatId);
+  try {
+    return await asyncFn();
+  } finally {
+    clearInterval(interval);
+  }
+}
+
 export async function setWebhook(url) {
   const res = await fetch(`${BASE_URL}/setWebhook`, {
     method: "POST",
