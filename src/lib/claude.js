@@ -19,13 +19,21 @@ Response rules:
 - Format with Markdown (bold, lists) for Telegram
 - When listing merchants, show max 10 unless asked for more
 - Include percentages and counts when analyzing data
-- If asked about something not in the data, say so clearly`;
+- You have access to web search - use it when the user asks about things outside the CRM data (industry info, regulations, company research, etc.)
+- When you search the web, cite your sources briefly`;
 
 export async function askClaude(userMessage, merchantData) {
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 1500,
+    max_tokens: 4096,
     system: SYSTEM_PROMPT,
+    tools: [
+      {
+        type: "web_search_20250305",
+        name: "web_search",
+        max_uses: 3,
+      },
+    ],
     messages: [
       {
         role: "user",
@@ -40,5 +48,6 @@ User question: ${userMessage}`,
     ],
   });
 
-  return response.content[0].text;
+  const textBlocks = response.content.filter((block) => block.type === "text");
+  return textBlocks.map((block) => block.text).join("\n\n");
 }

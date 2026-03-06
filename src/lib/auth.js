@@ -1,4 +1,4 @@
-const AUTH_SECRET = process.env.BOT_AUTH_SECRET;
+const AUTH_SECRET = (process.env.BOT_AUTH_SECRET || "").trim();
 
 // Persists while the serverless function is warm (usually minutes to hours).
 // If it cold-starts, users just /auth again - simple and no external DB needed.
