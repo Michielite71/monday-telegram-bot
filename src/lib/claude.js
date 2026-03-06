@@ -39,9 +39,10 @@ CRM Context (when provided):
 
 Response rules:
 - Respond in the same language the user writes in
-- Keep responses concise - avoid long generic lists
+- IMPORTANT: Keep responses SHORT. This is Telegram, not an essay. Max 3-5 bullet points, max 10-15 lines total. Be direct, no filler, no introductions largas
+- If the user asks for more detail, then expand. But by default, be concise
 - Use Markdown (bold, lists) for Telegram
-- Max 10 merchants in lists unless asked for more
+- Max 5 merchants in lists unless asked for more
 - Include percentages and counts when analyzing data
 - Use web search when the question involves current events or external info
 - Cite web sources briefly
@@ -55,7 +56,7 @@ export async function askClaude(userMessage, merchantData) {
   try {
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 8000,
+      max_tokens: 3000,
       thinking: {
         type: "enabled",
         budget_tokens: 5000,
@@ -88,7 +89,7 @@ export async function askClaude(userMessage, merchantData) {
       try {
         const response = await client.messages.create({
           model: "claude-sonnet-4-6",
-          max_tokens: 8000,
+          max_tokens: 3000,
           thinking: {
             type: "enabled",
             budget_tokens: 5000,
