@@ -112,7 +112,7 @@ export async function askClaude(userMessage, merchantData) {
         const textBlocks = response.content.filter((block) => block.type === "text");
         return textBlocks.map((block) => block.text).join("\n\n");
       } catch {
-        return "⏳ Estoy procesando muchas consultas en este momento. Intentá de nuevo en un minuto.";
+        return "😎 Estoy pensando fuerte... dame un momento, working on it!";
       }
     }
     throw err;
