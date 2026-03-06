@@ -234,6 +234,8 @@ const COMMANDS = {
   "/logout": handleLogout,
 };
 
+const BOT_USERNAME = "s_interio_bot";
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -244,11 +246,38 @@ export async function POST(request) {
     }
 
     const chatId = message.chat.id;
+    const isGroup = message.chat.type === "group" || message.chat.type === "supergroup";
     const text = message.text.trim();
 
     const parts = text.split(" ");
     const command = parts[0].toLowerCase().split("@")[0];
+    const commandTarget = parts[0].toLowerCase().includes("@") ? parts[0].toLowerCase().split("@")[1] : null;
     const args = parts.slice(1).join(" ");
+
+    // In groups, only respond to commands directed at us or mentions
+    if (isGroup && !text.startsWith("/")) {
+      const mentioned = text.toLowerCase().includes(`@${BOT_USERNAME}`) ||
+        (message.entities || []).some((e) =>
+          e.type === "mention" && text.substring(e.offset, e.offset + e.length).toLowerCase() === `@${BOT_USERNAME}`
+        ) ||
+        message.reply_to_message?.from?.username === BOT_USERNAME;
+
+      if (!mentioned) {
+        return NextResponse.json({ ok: true });
+      }
+
+      // Remove the @mention from the text before processing
+      const cleanText = text.replace(new RegExp(`@${BOT_USERNAME}`, "gi"), "").trim();
+      if (cleanText && isAuthorized(chatId)) {
+        await handleNaturalLanguage(chatId, cleanText);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // In groups, ignore commands targeted at other bots
+    if (isGroup && commandTarget && commandTarget !== BOT_USERNAME) {
+      return NextResponse.json({ ok: true });
+    }
 
     // Handle /auth separately (always available)
     if (command === "/auth") {
