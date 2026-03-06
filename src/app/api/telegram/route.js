@@ -2,16 +2,39 @@ import { NextResponse } from "next/server";
 import { sendMessage, sendTypingAction } from "@/lib/telegram";
 import { fetchAllMerchants, getMerchantSummary, formatMerchantDetail } from "@/lib/monday";
 import { askClaude } from "@/lib/claude";
+import { isAuthorized, authorize, deauthorize } from "@/lib/auth";
 
-const COMMANDS = {
-  "/start": handleStart,
-  "/help": handleHelp,
-  "/summary": handleSummary,
-  "/search": handleSearch,
-  "/stuck": handleStuck,
-};
+async function handleAuth(chatId, secret) {
+  if (!secret) {
+    await sendMessage(chatId, "Usage: `/auth your_secret_key`");
+    return;
+  }
+
+  if (authorize(chatId, secret)) {
+    await sendMessage(chatId,
+      `✅ *Authorized!*
+You now have access to the CRM bot.
+Type /help to see available commands.`
+    );
+  } else {
+    await sendMessage(chatId, "❌ Invalid key. Access denied.");
+  }
+}
 
 async function handleStart(chatId) {
+  if (!isAuthorized(chatId)) {
+    await sendMessage(chatId,
+      `🔒 *S-Interio CRM Bot*
+━━━━━━━━━━━━━━━
+This bot requires authentication.
+
+Use: \`/auth your_secret_key\`
+
+Contact your admin for access.`
+    );
+    return;
+  }
+
   await sendMessage(chatId,
     `👋 *S-Interio CRM Bot*
 ━━━━━━━━━━━━━━━
@@ -21,6 +44,7 @@ I can help you monitor the merchant pipeline.
 /summary - Pipeline overview
 /search \`name\` - Find a merchant
 /stuck - Show stuck merchants
+/logout - Revoke access
 /help - All commands
 
 Or just *ask me anything* in natural language:
@@ -36,6 +60,7 @@ async function handleHelp(chatId) {
 /summary - Pipeline overview with counts
 /search \`name\` - Search merchant by name
 /stuck - List all stuck/paused merchants
+/logout - Revoke your access
 /help - Show this help
 
 💬 *Natural Language:*
@@ -47,6 +72,11 @@ Examples:
 • _"Which merchants completed KYC?"_
 • _"Dame un resumen de los merchants de Betting"_`
   );
+}
+
+async function handleLogout(chatId) {
+  deauthorize(chatId);
+  await sendMessage(chatId, "🔒 Access revoked. Use `/auth` to log in again.");
 }
 
 async function handleSummary(chatId) {
@@ -153,7 +183,6 @@ async function handleNaturalLanguage(chatId, text) {
 
   const response = await askClaude(text, compactData);
 
-  // Telegram has a 4096 char limit per message
   if (response.length > 4000) {
     const chunks = response.match(/.{1,4000}/gs);
     for (const chunk of chunks) {
@@ -163,6 +192,18 @@ async function handleNaturalLanguage(chatId, text) {
     await sendMessage(chatId, response);
   }
 }
+
+const COMMANDS = {
+  "/start": handleStart,
+  "/help": handleHelp,
+  "/summary": handleSummary,
+  "/search": handleSearch,
+  "/stuck": handleStuck,
+  "/logout": handleLogout,
+};
+
+// Commands that don't require auth
+const PUBLIC_COMMANDS = new Set(["/start", "/auth"]);
 
 export async function POST(request) {
   try {
@@ -176,11 +217,31 @@ export async function POST(request) {
     const chatId = message.chat.id;
     const text = message.text.trim();
 
-    // Check if it's a command
     const parts = text.split(" ");
-    const command = parts[0].toLowerCase().split("@")[0]; // handle @botname
+    const command = parts[0].toLowerCase().split("@")[0];
     const args = parts.slice(1).join(" ");
 
+    // Handle /auth separately (always available)
+    if (command === "/auth") {
+      await handleAuth(chatId, args);
+      return NextResponse.json({ ok: true });
+    }
+
+    // Handle /start (shows auth prompt if not authorized)
+    if (command === "/start") {
+      await handleStart(chatId);
+      return NextResponse.json({ ok: true });
+    }
+
+    // All other commands/messages require auth
+    if (!isAuthorized(chatId)) {
+      await sendMessage(chatId,
+        "🔒 You need to authenticate first.\nUse: `/auth your_secret_key`"
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    // Handle commands
     if (COMMANDS[command]) {
       await COMMANDS[command](chatId, args);
     } else {
