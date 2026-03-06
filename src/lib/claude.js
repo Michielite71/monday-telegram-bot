@@ -56,10 +56,10 @@ export async function askClaude(userMessage, merchantData) {
   try {
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 3000,
+      max_tokens: 6000,
       thinking: {
         type: "enabled",
-        budget_tokens: 5000,
+        budget_tokens: 4000,
       },
       system: SYSTEM_PROMPT,
       tools: [
