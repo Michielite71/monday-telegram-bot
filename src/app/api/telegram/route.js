@@ -4,6 +4,22 @@ import { fetchAllMerchants, getMerchantSummary, formatMerchantDetail } from "@/l
 import { askClaude } from "@/lib/claude";
 import { isAuthorized, authorize, deauthorize } from "@/lib/auth";
 
+// Keywords that indicate the user is asking about CRM/pipeline data
+const CRM_KEYWORDS = [
+  "merchant", "pipeline", "onboarding", "integrating", "connected",
+  "stuck", "paused", "kyc", "aml", "nda", "mif", "sfp", "agreement",
+  "vertical", "fx", "betting", "adults", "psp", "pma",
+  "stage", "status", "board", "monday", "crm",
+  "bolsa", "processor", "rates", "presentation", "call",
+  "cuantos", "cuántos", "cuales", "cuáles", "listar", "lista",
+  "resumen", "summary", "search", "buscar", "merchants",
+];
+
+function needsCrmData(text) {
+  const lower = text.toLowerCase();
+  return CRM_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
 async function handleAuth(chatId, secret) {
   if (!secret) {
     await sendMessage(chatId, "Usage: `/auth your_secret_key`");
@@ -12,25 +28,25 @@ async function handleAuth(chatId, secret) {
 
   if (authorize(chatId, secret)) {
     await sendMessage(chatId,
-      `✅ *Authorized!*
-You now have access to the CRM bot.
-Type /help to see available commands.`
+      `✅ *Autorizado!*
+Ya tenés acceso a S-Interio Bot.
+Escribí /help para ver los comandos disponibles.`
     );
   } else {
-    await sendMessage(chatId, "❌ Invalid key. Access denied.");
+    await sendMessage(chatId, "❌ Clave inválida. Acceso denegado.");
   }
 }
 
 async function handleStart(chatId) {
   if (!isAuthorized(chatId)) {
     await sendMessage(chatId,
-      `🔒 *S-Interio CRM Bot*
+      `🔒 *S-Interio Bot*
 ━━━━━━━━━━━━━━━
-This bot requires authentication.
+Este bot requiere autenticación.
 
-Use: \`/auth your_secret_key\`
+Usá: \`/auth tu_clave_secreta\`
 
-Contact your admin for access.`
+Contactá al admin para obtener acceso.`
     );
     return;
   }
@@ -38,47 +54,57 @@ Contact your admin for access.`
   await sendMessage(chatId,
     `👋 *Soy S-Interio Bot*
 ━━━━━━━━━━━━━━━
-Estoy aquí para ayudar al equipo de S-Interio con tareas e información sobre el pipeline de merchants.
+Soy el asistente inteligente del equipo de S-Interio, potenciado por Claude Sonnet 4.6 con capacidades de razonamiento avanzado y búsqueda web.
 
-Aprendo y mejoro con cada interacción para darles respuestas cada vez más útiles.
+*Puedo ayudarte con:*
+🔹 Pipeline de merchants y datos del CRM
+🔹 Investigación de mercado y competencia
+🔹 Análisis de negocio y estrategia
+🔹 Redacción de emails, propuestas y reportes
+🔹 Cálculos financieros y proyecciones
+🔹 Regulaciones y compliance en payments
+🔹 Cualquier pregunta general
 
-*Comandos:*
+*Comandos rápidos:*
 /summary - Resumen del pipeline
 /search \`nombre\` - Buscar un merchant
 /stuck - Merchants detenidos
 /logout - Cerrar sesión
 /help - Todos los comandos
 
-O simplemente *preguntame lo que necesites*:
-_"How many FX merchants are in onboarding?"_
-_"Que merchants llevan mas tiempo sin avanzar?"_`
+O simplemente *escribime lo que necesites* 💬`
   );
 }
 
 async function handleHelp(chatId) {
   await sendMessage(chatId,
-    `📖 *Available Commands*
+    `📖 *Comandos Disponibles*
 ━━━━━━━━━━━━━━━
-/summary - Pipeline overview with counts
-/search \`name\` - Search merchant by name
-/stuck - List all stuck/paused merchants
-/logout - Revoke your access
-/help - Show this help
+/summary - Resumen del pipeline con conteo
+/search \`nombre\` - Buscar merchant por nombre
+/stuck - Listar merchants detenidos/pausados
+/logout - Cerrar sesión
+/help - Mostrar esta ayuda
 
-💬 *Natural Language:*
-Just type any question about your merchants and I'll analyze the data for you.
+💬 *Lenguaje Natural:*
+Escribime cualquier pregunta y la analizo con razonamiento avanzado.
 
-Examples:
-• _"Status of VPTrade"_
-• _"Cuantos merchants hay en integrating?"_
-• _"Which merchants completed KYC?"_
-• _"Dame un resumen de los merchants de Betting"_`
+*Ejemplos CRM:*
+• _"Status de VPTrade"_
+• _"Cuántos merchants hay en integrating?"_
+• _"Dame un resumen de los merchants de Betting"_
+
+*Ejemplos Generales:*
+• _"Redactame un email para un merchant nuevo"_
+• _"Qué regulaciones aplican para payments en Europa?"_
+• _"Analiza las tendencias en el mercado de FX"_
+• _"Ayudame a calcular las tasas para este merchant"_`
   );
 }
 
 async function handleLogout(chatId) {
   deauthorize(chatId);
-  await sendMessage(chatId, "🔒 Access revoked. Use `/auth` to log in again.");
+  await sendMessage(chatId, "🔒 Sesión cerrada. Usá `/auth` para volver a ingresar.");
 }
 
 async function handleSummary(chatId) {
@@ -171,19 +197,23 @@ async function handleStuck(chatId) {
 async function handleNaturalLanguage(chatId, text) {
   await sendTypingAction(chatId);
 
-  const items = await fetchAllMerchants();
+  let merchantData = null;
 
-  const compactData = items.map((item) => ({
-    name: item.name,
-    group: item.group.title,
-    columns: Object.fromEntries(
-      item.column_values
-        .filter((c) => c.text)
-        .map((c) => [c.id, c.text])
-    ),
-  }));
+  // Only fetch CRM data if the question seems related
+  if (needsCrmData(text)) {
+    const items = await fetchAllMerchants();
+    merchantData = items.map((item) => ({
+      name: item.name,
+      group: item.group.title,
+      columns: Object.fromEntries(
+        item.column_values
+          .filter((c) => c.text)
+          .map((c) => [c.id, c.text])
+      ),
+    }));
+  }
 
-  const response = await askClaude(text, compactData);
+  const response = await askClaude(text, merchantData);
 
   if (response.length > 4000) {
     const chunks = response.match(/.{1,4000}/gs);
@@ -203,9 +233,6 @@ const COMMANDS = {
   "/stuck": handleStuck,
   "/logout": handleLogout,
 };
-
-// Commands that don't require auth
-const PUBLIC_COMMANDS = new Set(["/start", "/auth"]);
 
 export async function POST(request) {
   try {
@@ -238,7 +265,7 @@ export async function POST(request) {
     // All other commands/messages require auth
     if (!isAuthorized(chatId)) {
       await sendMessage(chatId,
-        "🔒 You need to authenticate first.\nUse: `/auth your_secret_key`"
+        "🔒 Necesitás autenticarte primero.\nUsá: `/auth tu_clave_secreta`"
       );
       return NextResponse.json({ ok: true });
     }
