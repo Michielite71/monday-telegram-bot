@@ -36,18 +36,20 @@ Contact your admin for access.`
   }
 
   await sendMessage(chatId,
-    `👋 *S-Interio CRM Bot*
+    `👋 *Soy S-Interio Bot*
 ━━━━━━━━━━━━━━━
-I can help you monitor the merchant pipeline.
+Estoy aquí para ayudar al equipo de S-Interio con tareas e información sobre el pipeline de merchants.
 
-*Commands:*
-/summary - Pipeline overview
-/search \`name\` - Find a merchant
-/stuck - Show stuck merchants
-/logout - Revoke access
-/help - All commands
+Aprendo y mejoro con cada interacción para darles respuestas cada vez más útiles.
 
-Or just *ask me anything* in natural language:
+*Comandos:*
+/summary - Resumen del pipeline
+/search \`nombre\` - Buscar un merchant
+/stuck - Merchants detenidos
+/logout - Cerrar sesión
+/help - Todos los comandos
+
+O simplemente *preguntame lo que necesites*:
 _"How many FX merchants are in onboarding?"_
 _"Que merchants llevan mas tiempo sin avanzar?"_`
   );
