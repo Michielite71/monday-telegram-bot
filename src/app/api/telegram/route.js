@@ -198,15 +198,22 @@ async function handleNaturalLanguage(chatId, text) {
     // Only fetch CRM data if the question seems related
     if (needsCrmData(text)) {
       const items = await fetchAllMerchants();
-      merchantData = items.map((item) => ({
-        name: item.name,
-        group: item.group.title,
-        columns: Object.fromEntries(
-          item.column_values
-            .filter((c) => c.text)
-            .map((c) => [c.id, c.text])
-        ),
-      }));
+      // Map column IDs to short names to save tokens
+      const COL_NAMES = {
+        color_mksax617: "vertical", status: "presentation", color_mm0gvm7j: "call",
+        color_mksah081: "nda", color_mksa17kf: "mif", color_mksakysh: "rates",
+        color_mksahbew: "kyc", color_mkwfzxr4: "sfp", color_mksa9qkk: "agreement",
+        color_mksabbma: "integration", color_mm0gj9q8: "extra1", color_mm0nh0ps: "extra2",
+        text_mksdt5dn: "contact", text_mksd9sqe: "notes", dropdown_mksd3xc0: "dropdown",
+        multiple_person_mksdn607: "assignee",
+      };
+      merchantData = items.map((item) => {
+        const row = { n: item.name, g: item.group.title };
+        item.column_values.forEach((c) => {
+          if (c.text) row[COL_NAMES[c.id] || c.id] = c.text;
+        });
+        return row;
+      });
     }
 
     return await askClaude(text, merchantData);

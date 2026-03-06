@@ -32,58 +32,89 @@ Simplemente preguntame lo que necesites."
 Keep it natural and conversational. You can shorten or adapt based on context.
 
 CRM Context (when provided):
-- Merchants go through a pipeline: Presentation → Call → NDA → MIF Form → Rates → KYC/AML → SFP → Agreement → Integration
-- Groups: Onboarding/Introducing, Slow Onboarding, Integrating, Connected, Bolsa, Stopped by Processors
+- Pipeline stages: Presentation, Call, NDA, MIF Form, Rates, KYC/AML, SFP, Agreement, Integration
+- Groups: Onboarding, Slow Onboarding, Integrating, Connected, Bolsa, Stopped by Processors
 - Verticals: FX, Betting, Adults, Digital Bank, PSP, PMA, etc.
-- Stage statuses: Done (green), In Progress (orange), Stuck (red), Empty (not started)
+- Statuses: Done=green, In Progress=orange, Stuck=red, Empty=not started
 
 Response rules:
-- Always respond in the same language the user writes in (Spanish, English, or any other)
-- Think deeply before answering complex questions
-- Keep responses concise but thorough - avoid long generic lists of capabilities
-- Use emojis sparingly for readability
-- Format with Markdown (bold, lists) for Telegram
-- When listing merchants, show max 10 unless asked for more
+- Respond in the same language the user writes in
+- Keep responses concise - avoid long generic lists
+- Use Markdown (bold, lists) for Telegram
+- Max 10 merchants in lists unless asked for more
 - Include percentages and counts when analyzing data
-- Use web search proactively when the question involves current events, external info, or would benefit from real-time data
-- When you search the web, cite sources briefly
-- If asked about something not in the CRM data and not findable online, say so clearly
-- Never say you "can't search the internet" - you CAN and should when useful`;
+- Use web search when the question involves current events or external info
+- Cite web sources briefly
+- Never say you "can't search the internet" - you CAN`;
 
 export async function askClaude(userMessage, merchantData) {
   const userContent = merchantData
-    ? `Here is the current S-Interio merchant pipeline data (JSON):
-
-\`\`\`json
-${JSON.stringify(merchantData, null, 0)}
-\`\`\`
-
-User message: ${userMessage}`
+    ? `CRM data (JSON): ${JSON.stringify(merchantData)}\n\nQuestion: ${userMessage}`
     : userMessage;
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 16000,
-    thinking: {
-      type: "enabled",
-      budget_tokens: 10000,
-    },
-    system: SYSTEM_PROMPT,
-    tools: [
-      {
-        type: "web_search_20250305",
-        name: "web_search",
-        max_uses: 5,
+  try {
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 8000,
+      thinking: {
+        type: "enabled",
+        budget_tokens: 5000,
       },
-    ],
-    messages: [
-      {
-        role: "user",
-        content: userContent,
-      },
-    ],
-  });
+      system: SYSTEM_PROMPT,
+      tools: [
+        {
+          type: "web_search_20250305",
+          name: "web_search",
+          max_uses: 3,
+        },
+      ],
+      messages: [
+        {
+          role: "user",
+          content: userContent,
+        },
+      ],
+    });
 
-  const textBlocks = response.content.filter((block) => block.type === "text");
-  return textBlocks.map((block) => block.text).join("\n\n");
+    const textBlocks = response.content.filter((block) => block.type === "text");
+    return textBlocks.map((block) => block.text).join("\n\n");
+  } catch (err) {
+    if (err.status === 429) {
+      // Wait and retry once
+      const retryAfter = parseInt(err.headers?.get?.("retry-after") || "30", 10);
+      const waitTime = Math.min(retryAfter, 60) * 1000;
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+
+      try {
+        const response = await client.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 8000,
+          thinking: {
+            type: "enabled",
+            budget_tokens: 5000,
+          },
+          system: SYSTEM_PROMPT,
+          tools: [
+            {
+              type: "web_search_20250305",
+              name: "web_search",
+              max_uses: 3,
+            },
+          ],
+          messages: [
+            {
+              role: "user",
+              content: userContent,
+            },
+          ],
+        });
+
+        const textBlocks = response.content.filter((block) => block.type === "text");
+        return textBlocks.map((block) => block.text).join("\n\n");
+      } catch {
+        return "⏳ Estoy procesando muchas consultas en este momento. Intentá de nuevo en un minuto.";
+      }
+    }
+    throw err;
+  }
 }
