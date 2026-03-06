@@ -272,8 +272,12 @@ export async function POST(request) {
 
       // Remove the @mention from the text before processing
       const cleanText = text.replace(new RegExp(`@${BOT_USERNAME}`, "gi"), "").trim();
-      if (cleanText && isAuthorized(chatId)) {
+      if (!isAuthorized(chatId)) {
+        await sendMessage(chatId, "🔒 Necesitás autenticarte primero.\nUsá: `/auth tu_clave_secreta`");
+      } else if (cleanText) {
         await handleNaturalLanguage(chatId, cleanText);
+      } else {
+        await sendMessage(chatId, "👋 Acá estoy. ¿En qué te puedo ayudar? Escribí tu pregunta mencionándome.");
       }
       return NextResponse.json({ ok: true });
     }
