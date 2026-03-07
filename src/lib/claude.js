@@ -26,6 +26,7 @@ Puedo ayudarte con casi cualquier cosa:
 - Cálculos — proyecciones financieras, modelos de precios, tasas de conversión
 - Tech — APIs, integraciones, programación
 - Traducciones — cualquier idioma
+- Archivos — puedo leer y analizar PDFs, Excel, imágenes y documentos
 
 Simplemente preguntame lo que necesites."
 
@@ -46,68 +47,83 @@ Response rules:
 - Include percentages and counts when analyzing data
 - Use web search when the question involves current events or external info
 - Cite web sources briefly
-- Never say you "can't search the internet" - you CAN`;
+- Never say you "can't search the internet" - you CAN
+- When analyzing files (PDF, Excel, images), summarize the key findings concisely`;
 
-export async function askClaude(userMessage, merchantData) {
-  const userContent = merchantData
-    ? `CRM data (JSON): ${JSON.stringify(merchantData)}\n\nQuestion: ${userMessage}`
-    : userMessage;
+function buildRequest(content) {
+  return {
+    model: "claude-sonnet-4-6",
+    max_tokens: 2000,
+    system: SYSTEM_PROMPT,
+    tools: [
+      {
+        type: "web_search_20250305",
+        name: "web_search",
+        max_uses: 3,
+      },
+    ],
+    messages: [
+      {
+        role: "user",
+        content,
+      },
+    ],
+  };
+}
+
+function extractText(response) {
+  const textBlocks = response.content.filter((block) => block.type === "text");
+  return textBlocks.map((block) => block.text).join("\n\n");
+}
+
+export async function askClaude(userMessage, merchantData, fileAttachments) {
+  // Build content blocks
+  const contentBlocks = [];
+
+  // Add file attachments (PDF, images)
+  if (fileAttachments) {
+    for (const file of fileAttachments) {
+      if (file.type === "pdf") {
+        contentBlocks.push({
+          type: "document",
+          source: { type: "base64", media_type: "application/pdf", data: file.data },
+        });
+      } else if (file.type === "image") {
+        contentBlocks.push({
+          type: "image",
+          source: { type: "base64", media_type: file.mediaType, data: file.data },
+        });
+      } else if (file.type === "text") {
+        // Pre-extracted text (Excel, CSV)
+        contentBlocks.push({
+          type: "text",
+          text: `File "${file.name}":\n${file.data}`,
+        });
+      }
+    }
+  }
+
+  // Add main text message
+  let textContent = userMessage;
+  if (merchantData) {
+    textContent = `CRM data (JSON): ${JSON.stringify(merchantData)}\n\nQuestion: ${userMessage}`;
+  }
+  contentBlocks.push({ type: "text", text: textContent });
+
+  // Use string content if no files, array if files
+  const content = fileAttachments ? contentBlocks : textContent;
 
   try {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2000,
-      system: SYSTEM_PROMPT,
-      tools: [
-        {
-          type: "web_search_20250305",
-          name: "web_search",
-          max_uses: 3,
-        },
-      ],
-      messages: [
-        {
-          role: "user",
-          content: userContent,
-        },
-      ],
-    });
-
-    const textBlocks = response.content.filter((block) => block.type === "text");
-    return textBlocks.map((block) => block.text).join("\n\n");
+    const response = await client.messages.create(buildRequest(content));
+    return extractText(response);
   } catch (err) {
     if (err.status === 429) {
-      // Wait and retry once
       const retryAfter = parseInt(err.headers?.get?.("retry-after") || "30", 10);
-      const waitTime = Math.min(retryAfter, 60) * 1000;
-      await new Promise((resolve) => setTimeout(resolve, waitTime));
+      await new Promise((resolve) => setTimeout(resolve, Math.min(retryAfter, 60) * 1000));
 
       try {
-        const response = await client.messages.create({
-          model: "claude-sonnet-4-6",
-          max_tokens: 3000,
-          thinking: {
-            type: "enabled",
-            budget_tokens: 5000,
-          },
-          system: SYSTEM_PROMPT,
-          tools: [
-            {
-              type: "web_search_20250305",
-              name: "web_search",
-              max_uses: 3,
-            },
-          ],
-          messages: [
-            {
-              role: "user",
-              content: userContent,
-            },
-          ],
-        });
-
-        const textBlocks = response.content.filter((block) => block.type === "text");
-        return textBlocks.map((block) => block.text).join("\n\n");
+        const response = await client.messages.create(buildRequest(content));
+        return extractText(response);
       } catch {
         return "😎 Estoy pensando fuerte... dame un momento, working on it!";
       }

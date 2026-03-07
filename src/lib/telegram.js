@@ -37,6 +37,24 @@ export async function withTypingIndicator(chatId, asyncFn) {
   }
 }
 
+export async function getFileUrl(fileId) {
+  const res = await fetch(`${BASE_URL}/getFile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file_id: fileId }),
+  });
+  const data = await res.json();
+  if (!data.ok) return null;
+  return `https://api.telegram.org/file/bot${BOT_TOKEN}/${data.result.file_path}`;
+}
+
+export async function downloadFile(fileId) {
+  const url = await getFileUrl(fileId);
+  if (!url) return null;
+  const res = await fetch(url);
+  return Buffer.from(await res.arrayBuffer());
+}
+
 export async function setWebhook(url) {
   const res = await fetch(`${BASE_URL}/setWebhook`, {
     method: "POST",

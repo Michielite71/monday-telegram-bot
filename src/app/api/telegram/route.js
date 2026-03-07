@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { sendMessage, sendTypingAction, withTypingIndicator } from "@/lib/telegram";
+import { sendMessage, sendTypingAction, withTypingIndicator, downloadFile } from "@/lib/telegram";
 import { fetchAllMerchants, getMerchantSummary, formatMerchantDetail } from "@/lib/monday";
 import { askClaude } from "@/lib/claude";
 import { isAuthorized, authorize, deauthorize } from "@/lib/auth";
+import * as XLSX from "xlsx";
 
 // Keywords that indicate the user is asking about CRM/pipeline data
 const CRM_KEYWORDS = [
@@ -219,6 +220,51 @@ async function handleNaturalLanguage(chatId, text) {
     return await askClaude(text, merchantData);
   });
 
+  await sendResponse(chatId, response);
+}
+
+async function processFileAttachments(message) {
+  const attachments = [];
+
+  // Handle documents (PDF, Excel, CSV)
+  if (message.document) {
+    const doc = message.document;
+    const name = doc.file_name || "file";
+    const mime = doc.mime_type || "";
+    const buffer = await downloadFile(doc.file_id);
+    if (!buffer) return attachments;
+
+    if (mime === "application/pdf" || name.endsWith(".pdf")) {
+      attachments.push({ type: "pdf", data: buffer.toString("base64"), name });
+    } else if (mime.includes("spreadsheet") || mime.includes("excel") || name.match(/\.xlsx?$/i) || name.endsWith(".csv")) {
+      try {
+        const workbook = XLSX.read(buffer, { type: "buffer" });
+        const sheets = workbook.SheetNames.map((sheetName) => {
+          const rows = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]);
+          return `Sheet "${sheetName}":\n${rows}`;
+        });
+        attachments.push({ type: "text", data: sheets.join("\n\n"), name });
+      } catch {
+        attachments.push({ type: "text", data: "[Error reading Excel file]", name });
+      }
+    } else if (mime.startsWith("text/") || name.endsWith(".csv") || name.endsWith(".txt")) {
+      attachments.push({ type: "text", data: buffer.toString("utf-8"), name });
+    }
+  }
+
+  // Handle photos
+  if (message.photo && message.photo.length > 0) {
+    const photo = message.photo[message.photo.length - 1]; // Largest size
+    const buffer = await downloadFile(photo.file_id);
+    if (buffer) {
+      attachments.push({ type: "image", mediaType: "image/jpeg", data: buffer.toString("base64"), name: "photo.jpg" });
+    }
+  }
+
+  return attachments;
+}
+
+async function sendResponse(chatId, response) {
   if (response.length > 4000) {
     const chunks = response.match(/.{1,4000}/gs);
     for (const chunk of chunks) {
@@ -245,13 +291,40 @@ export async function POST(request) {
     const body = await request.json();
     const message = body.message;
 
-    if (!message?.text) {
+    const hasText = !!message?.text;
+    const hasFile = !!(message?.document || message?.photo);
+
+    if (!hasText && !hasFile) {
       return NextResponse.json({ ok: true });
     }
 
     const chatId = message.chat.id;
     const isGroup = message.chat.type === "group" || message.chat.type === "supergroup";
-    const text = message.text.trim();
+    const text = (message.text || message.caption || "").trim();
+
+    // Handle file uploads (documents, photos)
+    if (hasFile && !text.startsWith("/")) {
+      if (!isAuthorized(chatId)) {
+        await sendMessage(chatId, "🔒 Necesitás autenticarte primero.\nUsá: `/auth tu_clave_secreta`");
+        return NextResponse.json({ ok: true });
+      }
+
+      const response = await withTypingIndicator(chatId, async () => {
+        const files = await processFileAttachments(message);
+        if (files.length === 0) {
+          return "No pude procesar ese archivo. Formatos soportados: PDF, Excel (.xlsx/.xls), CSV, imágenes y texto.";
+        }
+        const prompt = text || "Analiza este archivo y dame un resumen de los puntos clave.";
+        return await askClaude(prompt, null, files);
+      });
+
+      await sendResponse(chatId, response);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (!hasText) {
+      return NextResponse.json({ ok: true });
+    }
 
     const parts = text.split(" ");
     const command = parts[0].toLowerCase().split("@")[0];
