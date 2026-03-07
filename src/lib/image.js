@@ -5,15 +5,12 @@ const replicate = new Replicate({
 });
 
 export async function generateImage(prompt) {
-  const output = await replicate.run("google/imagen-4", {
+  const output = await replicate.run("black-forest-labs/flux-2-pro", {
     input: {
       prompt,
-      aspect_ratio: "1:1",
-      safety_filter_level: "block_medium_and_above",
     },
   });
 
-  // Get the URL of the generated image
   const url = output.url();
   return url;
 }
