@@ -3,7 +3,7 @@ import { sendMessage, sendTypingAction, withTypingIndicator, downloadFile, sendP
 import { fetchAllMerchants, getMerchantSummary, formatMerchantDetail } from "@/lib/monday";
 import { askClaude } from "@/lib/claude";
 import { generateImage } from "@/lib/image";
-import { isAuthorized, authorize, deauthorize } from "@/lib/auth";
+import { isAuthorized, authorize, deauthorize, checkImageLimit } from "@/lib/auth";
 import * as XLSX from "xlsx";
 
 // Keywords that indicate the user is asking about CRM/pipeline data
@@ -40,7 +40,14 @@ function wantsImage(text) {
 }
 
 async function handleImageGeneration(chatId, text) {
-  await sendMessage(chatId, "🎬 Aplicando técnicas de composición cinematográfica... un momento");
+  const { allowed, remaining } = await checkImageLimit(chatId);
+  if (!allowed) {
+    await sendMessage(chatId, "🎬 Llegaste al límite de imágenes por hoy (5/día). Volvé a intentar mañana.");
+    return;
+  }
+
+  const remainingText = remaining > 0 ? ` _(${remaining} restantes hoy)_` : "";
+  await sendMessage(chatId, `🎬 Aplicando técnicas de composición cinematográfica... un momento${remainingText}`);
 
   const response = await withTypingIndicator(chatId, async () => {
     try {

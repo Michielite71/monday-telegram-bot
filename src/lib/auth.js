@@ -47,3 +47,26 @@ export async function deauthorize(chatId) {
   }
   memoryChats.delete(chatId);
 }
+
+// Image rate limit: max per day per chat
+const MAX_IMAGES_PER_DAY = 5;
+
+export async function checkImageLimit(chatId) {
+  if (!redis) return { allowed: true, remaining: MAX_IMAGES_PER_DAY };
+
+  try {
+    const key = `img:${chatId}:${new Date().toISOString().slice(0, 10)}`;
+    const count = (await redis.get(key)) || 0;
+
+    if (count >= MAX_IMAGES_PER_DAY) {
+      return { allowed: false, remaining: 0 };
+    }
+
+    await redis.incr(key);
+    await redis.expire(key, 86400);
+    return { allowed: true, remaining: MAX_IMAGES_PER_DAY - count - 1 };
+  } catch (err) {
+    console.error("Redis image limit error:", err);
+    return { allowed: true, remaining: MAX_IMAGES_PER_DAY };
+  }
+}
