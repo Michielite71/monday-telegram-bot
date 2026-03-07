@@ -16,18 +16,26 @@ const memoryChats = new Set();
 
 export async function isAuthorized(chatId) {
   if (redis) {
-    const val = await redis.get(`auth:${chatId}`);
-    return val === "1";
+    try {
+      const val = await redis.get(`auth:${chatId}`);
+      if (val) return true;
+    } catch (err) {
+      console.error("Redis read error:", err);
+    }
   }
   return memoryChats.has(chatId);
 }
 
 export async function authorize(chatId, secret) {
   if (secret === AUTH_SECRET) {
-    if (redis) {
-      await redis.set(`auth:${chatId}`, "1");
-    }
     memoryChats.add(chatId);
+    if (redis) {
+      try {
+        await redis.set(`auth:${chatId}`, "1");
+      } catch (err) {
+        console.error("Redis write error:", err);
+      }
+    }
     return true;
   }
   return false;
