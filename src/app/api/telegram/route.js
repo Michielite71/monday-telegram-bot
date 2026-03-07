@@ -40,7 +40,7 @@ function wantsImage(text) {
 }
 
 async function handleImageGeneration(chatId, text) {
-  await sendMessage(chatId, "🎨 Generando imagen con Google Imagen 4...");
+  await sendMessage(chatId, "🎬 Aplicando técnicas de composición cinematográfica... un momento");
 
   const response = await withTypingIndicator(chatId, async () => {
     try {
@@ -53,7 +53,7 @@ async function handleImageGeneration(chatId, text) {
   });
 
   if (response.type === "image") {
-    await sendPhoto(chatId, response.url, "🎨 _Generada con Google Imagen 4_");
+    await sendPhoto(chatId, response.url, "🎬✨ _Creada por S-Interio Bot_");
   } else {
     await sendMessage(chatId, response.message);
   }
