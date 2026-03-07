@@ -28,7 +28,17 @@ const ITEMS_FIELDS = `
   column_values(ids: [${COLUMN_IDS.map((c) => `"${c}"`).join(", ")}]) { id text }
 `;
 
+// Cache CRM data for 3 minutes to avoid repeated API calls
+const CACHE_TTL = 3 * 60 * 1000;
+let cachedItems = null;
+let cacheTimestamp = 0;
+
 export async function fetchAllMerchants() {
+  // Return cached data if still fresh
+  if (cachedItems && Date.now() - cacheTimestamp < CACHE_TTL) {
+    return cachedItems;
+  }
+
   let allItems = [];
 
   const firstRes = await queryMonday(`{
@@ -56,6 +66,8 @@ export async function fetchAllMerchants() {
     cursor = nextPage.cursor;
   }
 
+  cachedItems = allItems;
+  cacheTimestamp = Date.now();
   return allItems;
 }
 

@@ -27,7 +27,7 @@ async function handleAuth(chatId, secret) {
     return;
   }
 
-  if (authorize(chatId, secret)) {
+  if (await authorize(chatId, secret)) {
     await sendMessage(chatId,
       `✅ *Autorizado!*
 Ya tenés acceso a S-Interio Bot.
@@ -39,7 +39,7 @@ Escribí /help para ver los comandos disponibles.`
 }
 
 async function handleStart(chatId) {
-  if (!isAuthorized(chatId)) {
+  if (!(await isAuthorized(chatId))) {
     await sendMessage(chatId,
       `🔒 *S-Interio Bot*
 ━━━━━━━━━━━━━━━
@@ -55,7 +55,7 @@ Contactá al admin para obtener acceso.`
   await sendMessage(chatId,
     `👋 *Soy S-Interio Bot*
 ━━━━━━━━━━━━━━━
-Soy el asistente inteligente del equipo de S-Interio, potenciado por Claude Sonnet 4.6 con capacidades de razonamiento avanzado y búsqueda web.
+Soy el asistente IA del equipo de S-Interio, creado por el Tech Team con capacidades de razonamiento avanzado y búsqueda web.
 
 *Puedo ayudarte con:*
 🔹 Pipeline de merchants y datos del CRM
@@ -104,7 +104,7 @@ Escribime cualquier pregunta y la analizo con razonamiento avanzado.
 }
 
 async function handleLogout(chatId) {
-  deauthorize(chatId);
+  await deauthorize(chatId);
   await sendMessage(chatId, "🔒 Sesión cerrada. Usá `/auth` para volver a ingresar.");
 }
 
@@ -304,7 +304,7 @@ export async function POST(request) {
 
     // Handle file uploads (documents, photos)
     if (hasFile && !text.startsWith("/")) {
-      if (!isAuthorized(chatId)) {
+      if (!(await isAuthorized(chatId))) {
         await sendMessage(chatId, "🔒 Necesitás autenticarte primero.\nUsá: `/auth tu_clave_secreta`");
         return NextResponse.json({ ok: true });
       }
@@ -345,7 +345,7 @@ export async function POST(request) {
 
       // Remove the @mention from the text before processing
       const cleanText = text.replace(new RegExp(`@${BOT_USERNAME}`, "gi"), "").trim();
-      if (!isAuthorized(chatId)) {
+      if (!(await isAuthorized(chatId))) {
         await sendMessage(chatId, "🔒 Necesitás autenticarte primero.\nUsá: `/auth tu_clave_secreta`");
       } else if (cleanText) {
         await handleNaturalLanguage(chatId, cleanText);
@@ -373,7 +373,7 @@ export async function POST(request) {
     }
 
     // All other commands/messages require auth
-    if (!isAuthorized(chatId)) {
+    if (!(await isAuthorized(chatId))) {
       await sendMessage(chatId,
         "🔒 Necesitás autenticarte primero.\nUsá: `/auth tu_clave_secreta`"
       );
