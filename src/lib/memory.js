@@ -35,8 +35,8 @@ export async function saveChatHistory(chatId, userMessage, assistantMessage) {
       history = history.slice(-MAX_HISTORY);
     }
 
-    // Expire after 1 hour of inactivity
-    await redis.set(`history:${chatId}`, history, { ex: 3600 });
+    // Expire after 5 minutes of inactivity
+    await redis.set(`history:${chatId}`, history, { ex: 300 });
   } catch (err) {
     console.error("Memory save error:", err);
   }
