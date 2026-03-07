@@ -40,14 +40,13 @@ function wantsImage(text) {
 }
 
 async function handleImageGeneration(chatId, text) {
-  const { allowed, remaining } = await checkImageLimit(chatId);
+  const { allowed } = await checkImageLimit(chatId);
   if (!allowed) {
     await sendMessage(chatId, "📸🪫 Me exporze mucho... me quedé sin energía para crear más! Dejá que recargue la batería de la cámara por 1 día y vuelvo con todo.");
     return;
   }
 
-  const remainingText = remaining > 0 ? ` _(${remaining} restantes hoy)_` : "";
-  await sendMessage(chatId, `🎬 Aplicando técnicas de composición cinematográfica... un momento${remainingText}`);
+  await sendMessage(chatId, "🎬 Aplicando técnicas de composición cinematográfica... un momento");
 
   const response = await withTypingIndicator(chatId, async () => {
     try {
