@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { sendMessage, sendTypingAction, withTypingIndicator, downloadFile } from "@/lib/telegram";
+import { sendMessage, sendTypingAction, withTypingIndicator, downloadFile, sendPhoto } from "@/lib/telegram";
 import { fetchAllMerchants, getMerchantSummary, formatMerchantDetail } from "@/lib/monday";
 import { askClaude } from "@/lib/claude";
+import { generateImage } from "@/lib/image";
 import { isAuthorized, authorize, deauthorize } from "@/lib/auth";
 import * as XLSX from "xlsx";
 
@@ -19,6 +20,43 @@ const CRM_KEYWORDS = [
 function needsCrmData(text) {
   const lower = text.toLowerCase();
   return CRM_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+const IMAGE_KEYWORDS = [
+  "genera", "generame", "generar", "crea", "creame", "crear",
+  "dibuja", "dibujame", "dibujar", "diseña", "diseñame",
+  "generate", "create", "draw", "design", "make me",
+  "imagen", "image", "foto", "photo", "logo", "ilustra",
+  "banner", "poster", "mockup", "render",
+];
+
+function wantsImage(text) {
+  const lower = text.toLowerCase();
+  return IMAGE_KEYWORDS.some((kw) => lower.includes(kw)) &&
+    (lower.includes("imagen") || lower.includes("image") || lower.includes("foto") ||
+     lower.includes("logo") || lower.includes("banner") || lower.includes("poster") ||
+     lower.includes("dibujo") || lower.includes("diseño") || lower.includes("mockup") ||
+     lower.includes("genera") || lower.includes("create") || lower.includes("draw"));
+}
+
+async function handleImageGeneration(chatId, text) {
+  await sendMessage(chatId, "🎨 Generando imagen con Google Imagen 4...");
+
+  const response = await withTypingIndicator(chatId, async () => {
+    try {
+      const imageUrl = await generateImage(text);
+      return { type: "image", url: imageUrl };
+    } catch (err) {
+      console.error("Image generation error:", err);
+      return { type: "error", message: "No pude generar la imagen. Intentá con otra descripción." };
+    }
+  });
+
+  if (response.type === "image") {
+    await sendPhoto(chatId, response.url, "🎨 _Generada con Google Imagen 4_");
+  } else {
+    await sendMessage(chatId, response.message);
+  }
 }
 
 async function handleAuth(chatId, secret) {
@@ -347,6 +385,8 @@ export async function POST(request) {
       const cleanText = text.replace(new RegExp(`@${BOT_USERNAME}`, "gi"), "").trim();
       if (!(await isAuthorized(chatId))) {
         await sendMessage(chatId, "🔒 Necesitás autenticarte primero.\nUsá: `/auth tu_clave_secreta`");
+      } else if (cleanText && wantsImage(cleanText)) {
+        await handleImageGeneration(chatId, cleanText);
       } else if (cleanText) {
         await handleNaturalLanguage(chatId, cleanText);
       } else {
@@ -383,6 +423,8 @@ export async function POST(request) {
     // Handle commands
     if (COMMANDS[command]) {
       await COMMANDS[command](chatId, args);
+    } else if (wantsImage(text)) {
+      await handleImageGeneration(chatId, text);
     } else {
       await handleNaturalLanguage(chatId, text);
     }

@@ -55,6 +55,20 @@ export async function downloadFile(fileId) {
   return Buffer.from(await res.arrayBuffer());
 }
 
+export async function sendPhoto(chatId, photoUrl, caption = "") {
+  const res = await fetch(`${BASE_URL}/sendPhoto`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      photo: photoUrl,
+      caption,
+      parse_mode: "Markdown",
+    }),
+  });
+  return res.json();
+}
+
 export async function setWebhook(url) {
   const res = await fetch(`${BASE_URL}/setWebhook`, {
     method: "POST",
