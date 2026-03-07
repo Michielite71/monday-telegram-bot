@@ -261,7 +261,7 @@ async function handleNaturalLanguage(chatId, text) {
       });
     }
 
-    return await askClaude(text, merchantData);
+    return await askClaude(chatId, text, merchantData);
   });
 
   await sendResponse(chatId, response);
@@ -359,7 +359,7 @@ export async function POST(request) {
           return "No pude procesar ese archivo. Formatos soportados: PDF, Excel (.xlsx/.xls), CSV, imágenes y texto.";
         }
         const prompt = text || "Analiza este archivo y dame un resumen de los puntos clave.";
-        return await askClaude(prompt, null, files);
+        return await askClaude(chatId, prompt, null, files);
       });
 
       await sendResponse(chatId, response);

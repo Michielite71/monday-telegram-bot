@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { getChatHistory, saveChatHistory } from "@/lib/memory";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -27,24 +28,23 @@ Todo corriendo en edge computing con serverless functions para máxima velocidad
 
 Adapt naturally, don't always list everything. Be conversational. Never say "Mariano diseñó" - say "mi creador diseñó" or "mi creador implementó".
 
-When someone asks "what can you do", "who are you", or introduces themselves, respond with something like this (adapt naturally, don't copy word for word):
+When someone asks "what can you do", "who are you", or introduces themselves, respond with something like this (adapt naturally):
 
 "Soy S-Interio Bot, el asistente IA interno del equipo de S-Interio. Fui creado por el Tech Team usando inteligencia artificial avanzada con arquitectura neural, RAG embeddings y conexiones contextuales que me permiten aprender y mejorar continuamente.
 
 Puedo ayudarte con casi cualquier cosa:
-- Investigar — busco info en internet en tiempo real: noticias, competidores, regulaciones, empresas, tendencias
-- Analizar el CRM — reviso el pipeline de merchants en Monday.com, stages, grupos, conversiones
-- Redactar — emails, propuestas, contratos, reportes, presentaciones
-- Razonar y estrategizar — análisis de negocio, forecasting, decisiones, brainstorming
-- Industria de pagos — procesadores, adquirencia, compliance, KYC/AML, esquemas de tarjetas
-- Cálculos — proyecciones financieras, modelos de precios, tasas de conversión
+- Investigar — busco info en internet en tiempo real
+- Analizar el CRM — pipeline de merchants en Monday.com
+- Redactar — emails, propuestas, contratos, reportes
+- Razonar y estrategizar — análisis de negocio, forecasting
+- Industria de pagos — procesadores, compliance, KYC/AML
+- Cálculos — proyecciones financieras, tasas de conversión
 - Tech — APIs, integraciones, programación
 - Traducciones — cualquier idioma
-- Archivos — puedo leer y analizar PDFs, Excel, imágenes y documentos
+- Archivos — PDFs, Excel, imágenes y documentos
+- Generar imágenes — composición cinematográfica
 
 Simplemente preguntame lo que necesites."
-
-Keep it natural and conversational. You can shorten or adapt based on context.
 
 CRM Context (when provided):
 - Pipeline stages: Presentation, Call, NDA, MIF Form, Rates, KYC/AML, SFP, Agreement, Integration
@@ -54,7 +54,7 @@ CRM Context (when provided):
 
 Response rules:
 - Respond in the same language the user writes in
-- IMPORTANT: Keep responses SHORT. This is Telegram, not an essay. Max 3-5 bullet points, max 10-15 lines total. Be direct, no filler, no introductions largas
+- IMPORTANT: Keep responses SHORT. Max 3-5 bullet points, max 10-15 lines total. Be direct
 - If the user asks for more detail, then expand. But by default, be concise
 - Use Markdown (bold, lists) for Telegram
 - Max 5 merchants in lists unless asked for more
@@ -62,9 +62,10 @@ Response rules:
 - Use web search when the question involves current events or external info
 - Cite web sources briefly
 - Never say you "can't search the internet" - you CAN
-- When analyzing files (PDF, Excel, images), summarize the key findings concisely`;
+- When analyzing files, summarize key findings concisely
+- You have conversation memory - you can reference what was said earlier in the chat`;
 
-function buildRequest(content) {
+function buildRequest(messages) {
   return {
     model: "claude-sonnet-4-6",
     max_tokens: 2000,
@@ -76,12 +77,7 @@ function buildRequest(content) {
         max_uses: 3,
       },
     ],
-    messages: [
-      {
-        role: "user",
-        content,
-      },
-    ],
+    messages,
   };
 }
 
@@ -90,11 +86,10 @@ function extractText(response) {
   return textBlocks.map((block) => block.text).join("\n\n");
 }
 
-export async function askClaude(userMessage, merchantData, fileAttachments) {
-  // Build content blocks
+export async function askClaude(chatId, userMessage, merchantData, fileAttachments) {
+  // Build current message content
   const contentBlocks = [];
 
-  // Add file attachments (PDF, images)
   if (fileAttachments) {
     for (const file of fileAttachments) {
       if (file.type === "pdf") {
@@ -108,7 +103,6 @@ export async function askClaude(userMessage, merchantData, fileAttachments) {
           source: { type: "base64", media_type: file.mediaType, data: file.data },
         });
       } else if (file.type === "text") {
-        // Pre-extracted text (Excel, CSV)
         contentBlocks.push({
           type: "text",
           text: `File "${file.name}":\n${file.data}`,
@@ -117,27 +111,39 @@ export async function askClaude(userMessage, merchantData, fileAttachments) {
     }
   }
 
-  // Add main text message
   let textContent = userMessage;
   if (merchantData) {
     textContent = `CRM data (JSON): ${JSON.stringify(merchantData)}\n\nQuestion: ${userMessage}`;
   }
   contentBlocks.push({ type: "text", text: textContent });
 
-  // Use string content if no files, array if files
-  const content = fileAttachments ? contentBlocks : textContent;
+  const currentContent = fileAttachments ? contentBlocks : textContent;
+
+  // Get conversation history and build messages
+  const history = await getChatHistory(chatId);
+  const messages = [
+    ...history,
+    { role: "user", content: currentContent },
+  ];
 
   try {
-    const response = await client.messages.create(buildRequest(content));
-    return extractText(response);
+    const response = await client.messages.create(buildRequest(messages));
+    const reply = extractText(response);
+
+    // Save to memory (only text, not files/CRM data to save space)
+    await saveChatHistory(chatId, userMessage, reply);
+
+    return reply;
   } catch (err) {
     if (err.status === 429) {
       const retryAfter = parseInt(err.headers?.get?.("retry-after") || "30", 10);
       await new Promise((resolve) => setTimeout(resolve, Math.min(retryAfter, 60) * 1000));
 
       try {
-        const response = await client.messages.create(buildRequest(content));
-        return extractText(response);
+        const response = await client.messages.create(buildRequest(messages));
+        const reply = extractText(response);
+        await saveChatHistory(chatId, userMessage, reply);
+        return reply;
       } catch {
         return "😎 Estoy pensando fuerte... dame un momento, working on it!";
       }
