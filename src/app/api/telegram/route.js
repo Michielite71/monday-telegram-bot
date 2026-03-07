@@ -42,7 +42,7 @@ function wantsImage(text) {
 async function handleImageGeneration(chatId, text) {
   const { allowed, remaining } = await checkImageLimit(chatId);
   if (!allowed) {
-    await sendMessage(chatId, "🎬 Llegaste al límite de imágenes por hoy (5/día). Volvé a intentar mañana.");
+    await sendMessage(chatId, "📸🪫 Me exporze mucho... me quedé sin energía para crear más! Dejá que recargue la batería de la cámara por 1 día y vuelvo con todo.");
     return;
   }
 
